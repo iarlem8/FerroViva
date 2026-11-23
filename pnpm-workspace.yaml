@@ -1,5 +1,7 @@
+
 pmOnFail: ignore
 
 minimumReleaseAgeExclude:
   - '@next/*'
   - next
+  - '@electric-sql/pglite'
