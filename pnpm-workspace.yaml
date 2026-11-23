@@ -5,3 +5,7 @@ minimumReleaseAgeExclude:
   - '@next/*'
   - next
   - '@electric-sql/pglite'
+
+onlyBuiltDependencies:
+  - esbuild
+  - workerd
