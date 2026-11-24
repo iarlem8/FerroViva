@@ -5,17 +5,19 @@ import { hashPassword } from 'better-auth/crypto'
 import { desc } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireAdministrator } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { getDatabase } from '@/lib/db'
 import { account, user } from '@/lib/db/schema'
 
 export async function getUsers() {
   await requireAdministrator()
+  const db = await getDatabase()
   return db.select({ id: user.id, name: user.name, email: user.email, role: user.role, createdAt: user.createdAt })
     .from(user).orderBy(desc(user.createdAt))
 }
 
 export async function createUser(form: FormData) {
   await requireAdministrator()
+  const db = await getDatabase()
   const name = String(form.get('name') ?? '').trim()
   const email = String(form.get('email') ?? '').trim().toLowerCase()
   const password = String(form.get('password') ?? '')

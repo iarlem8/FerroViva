@@ -1,48 +1,29 @@
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle as localDrizzle } from 'drizzle-orm/pglite'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
-import { createHash, randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
-import { hashPassword } from 'better-auth/crypto'
-import { initialData } from '../demo-data'
+import { createHash } from 'node:crypto'
+import { cache } from 'react'
+import { connection } from 'next/server'
 import * as schema from './schema'
 
-const globalForDb = globalThis as unknown as { ferrovivaDatabase?: ReturnType<typeof connect> }
-
-function connect() {
-  const external = Boolean(process.env.DATABASE_URL)
-  const building = process.env.NEXT_PHASE === 'phase-production-build'
-  const databaseName = process.env.LOCAL_DATABASE_NAME || 'postgres'
-  if (!/^[a-zA-Z0-9_-]+$/.test(databaseName)) throw new Error('Nome do banco local inválido.')
-  const directory = join(process.cwd(), '.data', databaseName)
-  const client = external ? new Pool({ connectionString: process.env.DATABASE_URL, max: 5 }) : new PGlite(building ? 'memory://' : directory)
-  const db = client instanceof Pool ? drizzle(client, { schema }) : localDrizzle(client, { schema })
-
-  // Prepara a instalação local antes de receber acessos, sem substituir cadastros.
-  const ready = (async () => {
-    if (client instanceof Pool) return
-    await client.exec(readFileSync(resolve('lib/db/local-schema.sql'), 'utf8'))
-    await db.transaction(async (tx) => {
-      for (const point of initialData.points) await tx.insert(schema.points).values({ id: point.id, data: point }).onConflictDoNothing()
-      for (const campaign of initialData.campaigns) await tx.insert(schema.campaigns).values({ id: campaign.id, data: campaign }).onConflictDoNothing()
-      const email = process.env.ADMIN_EMAIL?.trim().toLowerCase()
-      const password = process.env.ADMIN_PASSWORD
-      if (!email || !password || password.length < 8) throw new Error('Execute npm run setup:local antes de iniciar o projeto.')
-      const existing = await tx.select({ id: schema.user.id }).from(schema.user).limit(1)
-      if (!existing.length) {
-        const id = randomUUID()
-        await tx.insert(schema.user).values({ id, name: 'Iarlem Lacerda', email, role: 'admin' })
-        await tx.insert(schema.account).values({ id: randomUUID(), userId: id, accountId: id, providerId: 'credential', password: await hashPassword(password) })
-      }
+// Conexões PostgreSQL não podem ser compartilhadas entre requisições do Worker.
+export const getDatabase = cache(async () => {
+  await connection()
+  if (process.env.DATABASE_URL) {
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 5,
+      maxUses: 1,
+      connectionTimeoutMillis: 10_000,
+      idleTimeoutMillis: 1_000,
     })
-  })()
-  return { db, ready }
-}
+    return drizzle(pool, { schema })
+  }
+  if (process.env.FERROVIVA_CLOUDFLARE === '1') {
+    throw new Error('Configure DATABASE_URL nos secrets do Worker antes de acessar o FerroViva.')
+  } else {
+    const { getLocalDatabase } = await import('./local')
+    return getLocalDatabase()
+  }
+})
 
-const connection = globalForDb.ferrovivaDatabase ?? connect()
-globalForDb.ferrovivaDatabase = connection
-export const db = connection.db
-export const ensureDatabase = () => connection.ready
 export const hashReportCode = (code: string) => createHash('sha256').update(code.toUpperCase()).digest('hex')

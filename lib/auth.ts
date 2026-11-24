@@ -1,10 +1,17 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { headers } from 'next/headers'
-import { db, ensureDatabase } from '@/lib/db'
+import { cache } from 'react'
+import { getDatabase } from '@/lib/db'
 import * as schema from '@/lib/db/schema'
 
-export const auth = betterAuth({
+export const getAuth = cache(async () => {
+  const db = await getDatabase()
+  if (process.env.FERROVIVA_CLOUDFLARE === '1') {
+    if (!process.env.BETTER_AUTH_URL?.startsWith('https://')) throw new Error('Configure BETTER_AUTH_URL com a URL HTTPS do Worker.')
+    if (!process.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET.length < 32) throw new Error('Configure BETTER_AUTH_SECRET nos secrets do Worker (mínimo de 32 caracteres).')
+  }
+  return betterAuth({
   database: drizzleAdapter(db, { provider: 'pg', schema }),
   baseURL:
     process.env.BETTER_AUTH_URL ??
@@ -45,11 +52,13 @@ export const auth = betterAuth({
   ],
   session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
   rateLimit: { enabled: true, window: 60, max: 60 },
+  })
 })
 
 export async function readSession() {
-  await ensureDatabase()
-  return auth.api.getSession({ headers: await headers() })
+  const requestHeaders = await headers()
+  const auth = await getAuth()
+  return auth.api.getSession({ headers: requestHeaders })
 }
 
 export async function requireAdministrator() {

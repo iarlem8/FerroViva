@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   agentRules: false,
+  env: { FERROVIVA_CLOUDFLARE: process.env.FERROVIVA_CLOUDFLARE || '' },
   serverExternalPackages: ['@electric-sql/pglite'],
   outputFileTracingExcludes: { '/*': ['./.data/**/*', './test-results/**/*', './.env*'] },
   experimental: { serverActions: { bodySizeLimit: '8mb' } },

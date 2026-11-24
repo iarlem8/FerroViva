@@ -3,16 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=22.14.0 <25"
+  },
   "scripts": {
     "build": "next build",
+    "build:cloudflare": "node scripts/build-cloudflare.mjs",
     "dev": "next dev",
     "start": "next start",
     "setup:local": "node scripts/setup-local.mjs",
+    "setup:database": "node --experimental-strip-types --env-file=.env.production.local scripts/setup-database.mjs",
     "typecheck": "tsc --noEmit",
     "test": "playwright test",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "preview": "pnpm run build:cloudflare && opennextjs-cloudflare preview",
+    "deploy": "pnpm run build:cloudflare && pnpm run deploy:cloudflare",
+    "deploy:cloudflare": "opennextjs-cloudflare deploy -- --keep-vars",
+    "upload": "pnpm run build:cloudflare && opennextjs-cloudflare upload -- --keep-vars",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {

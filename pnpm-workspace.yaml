@@ -1,6 +1,9 @@
 
 pmOnFail: ignore
 
+# Evita os links simbólicos que o empacotamento do OpenNext não cria no Windows.
+nodeLinker: hoisted
+
 minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:

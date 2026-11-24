@@ -3,7 +3,7 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { and, desc, eq } from 'drizzle-orm'
 import { readSession, requireAdministrator } from '@/lib/auth'
-import { db, ensureDatabase, hashReportCode } from '@/lib/db'
+import { getDatabase, hashReportCode } from '@/lib/db'
 import { campaigns, points, reports, user } from '@/lib/db/schema'
 import type { DemoData, Report } from '@/lib/demo-data'
 
@@ -19,13 +19,14 @@ function publicReport(report: Report): Report {
 }
 
 export async function getPublicData(): Promise<DemoData> {
-  await ensureDatabase()
+  const db = await getDatabase()
   const [locations, actions] = await Promise.all([db.select().from(points), db.select().from(campaigns)])
   return { points: locations.map(row => row.data), campaigns: actions.map(row => row.data).filter(item => item.status !== 'Rascunho'), reports: [] }
 }
 
 export async function getAdminData(): Promise<DemoData> {
   await requireAdministrator()
+  const db = await getDatabase()
   const [locations, actions, entries] = await Promise.all([
     db.select().from(points), db.select().from(campaigns),
     db.select({ data: reports.data, name: user.name, email: user.email }).from(reports)
@@ -38,6 +39,7 @@ export async function getAdminData(): Promise<DemoData> {
 export async function getOwnReports() {
   const session = await readSession()
   if (!session?.user) throw new Error('Entre na sua conta.')
+  const db = await getDatabase()
   const entries = await db.select().from(reports).where(eq(reports.userId, session.user.id)).orderBy(desc(reports.createdAt))
   return entries.map(row => publicReport(row.data))
 }
@@ -59,12 +61,13 @@ export async function createReport(form: FormData) {
   } catch {
     return { error: 'Confira a descrição (10 a 3.000 caracteres), o bairro e os demais campos.' }
   }
+  const db = await getDatabase()
   await db.insert(reports).values({ id, codeHash: hashReportCode(code), userId: anonymous ? null : session!.user.id, data: report })
   return { report: { ...publicReport(report), code } }
 }
 
 export async function lookupReport(id: string, code: string) {
-  await ensureDatabase()
+  const db = await getDatabase()
   if (typeof id !== 'string' || typeof code !== 'string' || id.length > 60 || !/^[a-f0-9]{24}$/i.test(code)) return null
   const [row] = await db.select().from(reports).where(and(eq(reports.id, id.toUpperCase()), eq(reports.codeHash, hashReportCode(code)))).limit(1)
   return row ? publicReport(row.data) : null
@@ -72,6 +75,7 @@ export async function lookupReport(id: string, code: string) {
 
 export async function updateReport(id: string, form: FormData) {
   await requireAdministrator()
+  const db = await getDatabase()
   const status = field(form, 'status', 1, 50)
   if (!['Recebida', 'Em análise', 'Encaminhada', 'Em atendimento', 'Resolvida', 'Informações insuficientes', 'Não procedente'].includes(status)) throw new Error('Situação inválida.')
   const publicNote = field(form, 'publicNote', 0, 2000)
@@ -86,6 +90,7 @@ export async function updateReport(id: string, form: FormData) {
 
 export async function createPoint(form: FormData) {
   await requireAdministrator()
+  const db = await getDatabase()
   const lat = Number(field(form, 'lat', 1, 20))
   const lng = Number(field(form, 'lng', 1, 20))
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Error('Coordenadas inválidas.')
@@ -96,6 +101,7 @@ export async function createPoint(form: FormData) {
 
 export async function setPointVerified(id: string, verified: boolean) {
   await requireAdministrator()
+  const db = await getDatabase()
   if (typeof verified !== 'boolean') throw new Error('Verificação inválida.')
   const [row] = await db.select().from(points).where(eq(points.id, id))
   if (!row) throw new Error('Ponto não encontrado.')
@@ -104,6 +110,7 @@ export async function setPointVerified(id: string, verified: boolean) {
 
 export async function createCampaign(form: FormData) {
   await requireAdministrator()
+  const db = await getDatabase()
   const status = field(form, 'status')
   if (!['Publicada', 'Rascunho', 'Encerrada'].includes(status)) throw new Error('Situação inválida.')
   const id = randomUUID()
@@ -113,6 +120,7 @@ export async function createCampaign(form: FormData) {
 
 export async function setCampaignStatus(id: string, status: string) {
   await requireAdministrator()
+  const db = await getDatabase()
   if (!['Publicada', 'Rascunho', 'Encerrada'].includes(status)) throw new Error('Situação inválida.')
   const [row] = await db.select().from(campaigns).where(eq(campaigns.id, id))
   if (!row) throw new Error('Campanha não encontrada.')

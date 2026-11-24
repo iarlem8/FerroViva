@@ -3,11 +3,11 @@
 import { desc, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireAdministrator } from '@/lib/auth'
-import { db, ensureDatabase } from '@/lib/db'
+import { getDatabase } from '@/lib/db'
 import { posts } from '@/lib/db/schema'
 
 export async function getPublishedPosts() {
-  await ensureDatabase()
+  const db = await getDatabase()
   return db.select({
     id: posts.id,
     title: posts.title,
@@ -20,11 +20,13 @@ export async function getPublishedPosts() {
 
 export async function getAdminPosts() {
   await requireAdministrator()
+  const db = await getDatabase()
   return db.select().from(posts).orderBy(desc(posts.updatedAt)).limit(100)
 }
 
 export async function createPost(formData: FormData) {
   const userId = await requireAdministrator()
+  const db = await getDatabase()
   const title = String(formData.get('title') ?? '').trim()
   const summary = String(formData.get('summary') ?? '').trim()
   const content = String(formData.get('content') ?? '').trim()
@@ -40,6 +42,7 @@ export async function createPost(formData: FormData) {
 
 export async function setPostPublished(id: string, published: boolean) {
   await requireAdministrator()
+  const db = await getDatabase()
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Publicação inválida.')
   await db.update(posts).set({ published, updatedAt: new Date() }).where(eq(posts.id, id))
   revalidatePath('/ADM')
@@ -49,6 +52,7 @@ export async function setPostPublished(id: string, published: boolean) {
 
 export async function deletePost(id: string) {
   await requireAdministrator()
+  const db = await getDatabase()
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Publicação inválida.')
   await db.delete(posts).where(eq(posts.id, id))
   revalidatePath('/ADM')
